@@ -12,6 +12,8 @@ from knowledge_search import search_knowledge
 
 from multimodal_ai import analyze_image
 
+from multilingual_ai import multilingual_response
+
 
 # --------------------------------------------------
 # Page settings
@@ -43,9 +45,9 @@ medical_data = get_medical_data()
 st.title("🤖 AI Customer Service Chatbot")
 
 st.write(
-    "Chat with the chatbot using sentiment analysis, "
+    "Chat with the assistant using sentiment analysis, "
     "medical knowledge, dynamically updated knowledge, "
-    "and multimodal image analysis."
+    "multimodal image analysis, and multilingual support."
 )
 
 st.write(
@@ -69,22 +71,19 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 
-# --------------------------------------------------
-# Task 5 - Multimodal AI Assistant
-# --------------------------------------------------
+# ==================================================
+# TASK 5 - MULTIMODAL AI ASSISTANT
+# ==================================================
 
 st.divider()
 
 st.subheader("🖼️ Multimodal AI Assistant")
 
 st.write(
-    "Upload an image and ask a question about it. "
-    "The assistant can analyze visual information and "
-    "use the conversation context when answering."
+    "Upload an image and ask a question about it."
 )
 
 
-# Image uploader
 uploaded_image = st.file_uploader(
     "Upload an image",
     type=["jpg", "jpeg", "png", "webp"],
@@ -92,7 +91,6 @@ uploaded_image = st.file_uploader(
 )
 
 
-# Question for image
 image_question = st.text_input(
     "Ask a question about the image",
     placeholder="Example: What can you see in this image?",
@@ -100,24 +98,23 @@ image_question = st.text_input(
 )
 
 
-# Analyze image button
 if uploaded_image:
 
-    # Display uploaded image
     st.image(
         uploaded_image,
         caption="Uploaded image",
         use_container_width=True
     )
 
+
     if st.button(
         "🔍 Analyze Image",
         key="analyze_image_button"
     ):
 
-        # --------------------------------------------------
-        # Build conversation context
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # Build previous conversation context
+        # ----------------------------------------------
 
         previous_messages = []
 
@@ -130,21 +127,22 @@ if uploaded_image:
                 f"{role}: {content}"
             )
 
+
         conversation_context = "\n".join(
             previous_messages[-6:]
         )
 
 
-        # --------------------------------------------------
-        # Get image bytes
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # Get image
+        # ----------------------------------------------
 
         image_bytes = uploaded_image.getvalue()
 
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Analyze image
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         with st.spinner(
             "Analyzing the image..."
@@ -157,35 +155,38 @@ if uploaded_image:
             )
 
 
-        # --------------------------------------------------
-        # Display multimodal response
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # Display result
+        # ----------------------------------------------
 
         st.markdown("### 🤖 Image Analysis")
 
         st.write(image_response)
 
 
-        # --------------------------------------------------
-        # Save image conversation
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # Save conversation
+        # ----------------------------------------------
 
-        user_image_message = image_question
+        image_user_message = image_question
 
-        if not user_image_message:
-            user_image_message = (
+        if not image_user_message:
+
+            image_user_message = (
                 "Please analyze the uploaded image."
             )
+
 
         st.session_state.messages.append(
             {
                 "role": "user",
                 "content": (
-                    "🖼️ Image uploaded: "
-                    + user_image_message
+                    "🖼️ Image: "
+                    + image_user_message
                 )
             }
         )
+
 
         st.session_state.messages.append(
             {
@@ -195,13 +196,14 @@ if uploaded_image:
         )
 
 
-# --------------------------------------------------
-# Normal chatbot input
-# --------------------------------------------------
+# ==================================================
+# NORMAL CHAT
+# ==================================================
 
 st.divider()
 
 st.subheader("💬 Chat")
+
 
 user_input = st.chat_input(
     "Type your message..."
@@ -221,9 +223,38 @@ if user_input:
         }
     )
 
+
     with st.chat_message("user"):
 
         st.write(user_input)
+
+
+    # --------------------------------------------------
+    # Build conversation context
+    # --------------------------------------------------
+
+    previous_messages = []
+
+    for message in st.session_state.messages[:-1]:
+
+        role = message.get(
+            "role",
+            ""
+        )
+
+        content = message.get(
+            "content",
+            ""
+        )
+
+        previous_messages.append(
+            f"{role}: {content}"
+        )
+
+
+    conversation_context = "\n".join(
+        previous_messages[-8:]
+    )
 
 
     # --------------------------------------------------
@@ -268,7 +299,7 @@ if user_input:
 
 
     # --------------------------------------------------
-    # Analyze sentiment
+    # Sentiment analysis
     # --------------------------------------------------
 
     sentiment_result = analyze_sentiment(
@@ -314,18 +345,16 @@ if user_input:
 
 
     # --------------------------------------------------
-    # Response selection
+    # Find relevant information
     # --------------------------------------------------
 
-    response = ""
-
+    source_information = ""
     knowledge_source = ""
-
     dynamic_metadata = []
 
 
     # --------------------------------------------------
-    # Medical questions
+    # Medical knowledge
     # --------------------------------------------------
 
     if detected_parts:
@@ -335,6 +364,7 @@ if user_input:
             medical_data
         )
 
+
         if medical_results:
 
             if isinstance(
@@ -342,11 +372,13 @@ if user_input:
                 list
             ):
 
-                response = medical_results[0]
+                source_information = str(
+                    medical_results[0]
+                )
 
             else:
 
-                response = str(
+                source_information = str(
                     medical_results
                 )
 
@@ -354,44 +386,10 @@ if user_input:
 
 
     # --------------------------------------------------
-    # Positive sentiment
+    # Dynamic knowledge
     # --------------------------------------------------
 
-    if (
-        not response
-        and "positive" in sentiment
-    ):
-
-        response = (
-            "I'm glad to hear that! 😊 "
-            "How can I help you further?"
-        )
-
-        knowledge_source = "sentiment"
-
-
-    # --------------------------------------------------
-    # Negative sentiment
-    # --------------------------------------------------
-
-    elif (
-        not response
-        and "negative" in sentiment
-    ):
-
-        response = (
-            "I'm sorry you're having a difficult "
-            "experience. I'll do my best to help."
-        )
-
-        knowledge_source = "sentiment"
-
-
-    # --------------------------------------------------
-    # Dynamic knowledge base
-    # --------------------------------------------------
-
-    if not response:
+    if not source_information:
 
         try:
 
@@ -406,24 +404,98 @@ if user_input:
 
             if dynamic_documents:
 
-                response = (
-                    "Here is information from the "
-                    "dynamically updated knowledge base:\n\n"
-                    + dynamic_documents[0]
+                source_information = (
+                    dynamic_documents[0]
                 )
 
                 knowledge_source = "dynamic"
 
 
-            else:
-
-                response = (
-                    "Thank you for your message. "
-                    "How can I help you?"
-                )
-
-
         except Exception:
+
+            source_information = ""
+
+
+    # ==================================================
+    # TASK 6 - MULTILINGUAL RESPONSE
+    # ==================================================
+
+    # We use the multilingual assistant for the final
+    # response so the current user's language is preserved.
+
+    if source_information:
+
+        multilingual_context = f"""
+Previous conversation:
+{conversation_context}
+
+Relevant information retrieved from the chatbot's
+knowledge sources:
+
+{source_information}
+
+Detected medical information:
+{", ".join(detected_parts) if detected_parts else "None"}
+
+Sentiment:
+{sentiment}
+
+Use the retrieved information when answering.
+Do not invent facts that are not supported by it.
+"""
+
+    else:
+
+        multilingual_context = f"""
+Previous conversation:
+{conversation_context}
+
+There is no specific retrieved knowledge for this
+message.
+
+Detected medical information:
+{", ".join(detected_parts) if detected_parts else "None"}
+
+Sentiment:
+{sentiment}
+"""
+
+
+    # --------------------------------------------------
+    # Generate multilingual response
+    # --------------------------------------------------
+
+    response = multilingual_response(
+        user_input,
+        conversation_context=multilingual_context
+    )
+
+
+    # --------------------------------------------------
+    # Safety fallback
+    # --------------------------------------------------
+
+    if not response or not response.strip():
+
+        if source_information:
+
+            response = source_information
+
+        elif "positive" in sentiment:
+
+            response = (
+                "I'm glad to hear that! 😊 "
+                "How can I help you further?"
+            )
+
+        elif "negative" in sentiment:
+
+            response = (
+                "I'm sorry you're having a difficult "
+                "experience. I'll do my best to help."
+            )
+
+        else:
 
             response = (
                 "Thank you for your message. "
@@ -440,7 +512,10 @@ if user_input:
         st.write(response)
 
 
-        # Show detected medical information
+        # ----------------------------------------------
+        # Medical information detected
+        # ----------------------------------------------
+
         if detected_parts:
 
             st.caption(
@@ -451,7 +526,10 @@ if user_input:
             )
 
 
-        # Show dynamic knowledge source
+        # ----------------------------------------------
+        # Dynamic knowledge source
+        # ----------------------------------------------
+
         if knowledge_source == "dynamic":
 
             if dynamic_metadata:
@@ -464,6 +542,15 @@ if user_input:
                 st.caption(
                     f"Knowledge source: {source}"
                 )
+
+
+        # ----------------------------------------------
+        # Multilingual feature
+        # ----------------------------------------------
+
+        st.caption(
+            "🌐 Multilingual response enabled"
+        )
 
 
     # --------------------------------------------------
