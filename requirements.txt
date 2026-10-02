@@ -1,0 +1,10 @@
+streamlit
+python-dotenv
+requests
+transformers
+torch
+chromadb
+sentence-transformers
+scikit-learn
+matplotlib
+Pillow
