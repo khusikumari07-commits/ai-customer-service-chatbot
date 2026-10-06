@@ -14,6 +14,14 @@ from multimodal_ai import analyze_image
 
 from multilingual_ai import multilingual_response
 
+from arxiv_expert import (
+    load_papers,
+    search_papers,
+    extract_concepts,
+    create_concept_graph,
+    ask_openrouter
+)
+
 
 # --------------------------------------------------
 # Page settings
@@ -39,6 +47,18 @@ medical_data = get_medical_data()
 
 
 # --------------------------------------------------
+# Load arXiv knowledge base
+# --------------------------------------------------
+
+@st.cache_data
+def get_arxiv_papers():
+    return load_papers()
+
+
+arxiv_papers = get_arxiv_papers()
+
+
+# --------------------------------------------------
 # Page title
 # --------------------------------------------------
 
@@ -47,12 +67,18 @@ st.title("🤖 AI Customer Service Chatbot")
 st.write(
     "Chat with the assistant using sentiment analysis, "
     "medical knowledge, dynamically updated knowledge, "
-    "multimodal image analysis, and multilingual support."
+    "ArXiv research assistance, multimodal image analysis, "
+    "and multilingual support."
 )
 
 st.write(
     f"Medical knowledge base loaded: "
     f"{len(medical_data)} Q&A pairs"
+)
+
+st.write(
+    f"ArXiv Computer Science papers loaded: "
+    f"{len(arxiv_papers)}"
 )
 
 
@@ -106,15 +132,10 @@ if uploaded_image:
         use_container_width=True
     )
 
-
     if st.button(
         "🔍 Analyze Image",
         key="analyze_image_button"
     ):
-
-        # ----------------------------------------------
-        # Build previous conversation context
-        # ----------------------------------------------
 
         previous_messages = []
 
@@ -127,22 +148,11 @@ if uploaded_image:
                 f"{role}: {content}"
             )
 
-
         conversation_context = "\n".join(
             previous_messages[-6:]
         )
 
-
-        # ----------------------------------------------
-        # Get image
-        # ----------------------------------------------
-
         image_bytes = uploaded_image.getvalue()
-
-
-        # ----------------------------------------------
-        # Analyze image
-        # ----------------------------------------------
 
         with st.spinner(
             "Analyzing the image..."
@@ -154,19 +164,9 @@ if uploaded_image:
                 conversation_context
             )
 
-
-        # ----------------------------------------------
-        # Display result
-        # ----------------------------------------------
-
         st.markdown("### 🤖 Image Analysis")
 
         st.write(image_response)
-
-
-        # ----------------------------------------------
-        # Save conversation
-        # ----------------------------------------------
 
         image_user_message = image_question
 
@@ -175,7 +175,6 @@ if uploaded_image:
             image_user_message = (
                 "Please analyze the uploaded image."
             )
-
 
         st.session_state.messages.append(
             {
@@ -187,13 +186,346 @@ if uploaded_image:
             }
         )
 
-
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": image_response
             }
         )
+
+
+# ==================================================
+# TASK 4 - ARXIV COMPUTER SCIENCE EXPERT
+# ==================================================
+
+st.divider()
+
+st.subheader(
+    "📚 Task 4 — ArXiv Computer Science Expert"
+)
+
+st.write(
+    "Search Computer Science research papers, "
+    "explore extracted concepts, generate AI explanations, "
+    "and ask follow-up questions about selected papers."
+)
+
+
+# --------------------------------------------------
+# Paper search
+# --------------------------------------------------
+
+arxiv_query = st.text_input(
+    "🔎 Search Computer Science research papers",
+    placeholder=(
+        "Example: transformer models for natural "
+        "language processing"
+    ),
+    key="arxiv_search_query"
+)
+
+
+if arxiv_query:
+
+    arxiv_results = search_papers(
+        arxiv_query,
+        top_k=5
+    )
+
+    if not arxiv_results:
+
+        st.warning(
+            "No matching Computer Science papers found."
+        )
+
+    else:
+
+        st.markdown("### 📄 Research Paper Results")
+
+        for number, result in enumerate(
+            arxiv_results,
+            start=1
+        ):
+
+            paper = result["paper"]
+
+            title = paper.get(
+                "title",
+                "Untitled"
+            ).strip()
+
+            abstract = paper.get(
+                "abstract",
+                "No abstract available."
+            ).strip()
+
+            paper_id = paper.get(
+                "id",
+                ""
+            )
+
+            categories = paper.get(
+                "categories",
+                ""
+            )
+
+            concepts = extract_concepts(
+                paper
+            )
+
+            with st.expander(
+                f"{number}. {title}"
+            ):
+
+                st.write(
+                    f"**arXiv ID:** {paper_id}"
+                )
+
+                st.write(
+                    f"**Categories:** {categories}"
+                )
+
+                st.write(
+                    f"**Relevance Score:** "
+                    f"{result['score']:.3f}"
+                )
+
+                st.write("### Abstract")
+
+                st.write(abstract)
+
+                st.write(
+                    "### 🧠 Extracted Concepts"
+                )
+
+                if concepts:
+
+                    st.write(
+                        ", ".join(concepts)
+                    )
+
+                else:
+
+                    st.write(
+                        "No major concepts detected."
+                    )
+
+
+                # ------------------------------------------
+                # AI explanation
+                # ------------------------------------------
+
+                if st.button(
+                    "🤖 Explain this paper",
+                    key=f"arxiv_explain_{number}"
+                ):
+
+                    prompt = f"""
+Explain this Computer Science research paper
+in simple but technically accurate language.
+
+Title:
+{title}
+
+Abstract:
+{abstract}
+
+Extracted concepts:
+{", ".join(concepts)}
+
+Please provide:
+
+1. Research problem
+2. Main idea
+3. Method or approach
+4. Important concepts
+5. Possible applications
+6. Simple explanation for a student
+
+Do not invent details that are not supported
+by the supplied paper information.
+"""
+
+                    with st.spinner(
+                        "Generating explanation..."
+                    ):
+
+                        explanation = ask_openrouter(
+                            prompt
+                        )
+
+                    st.markdown(
+                        "### 🤖 AI Explanation"
+                    )
+
+                    st.write(explanation)
+
+                    st.session_state[
+                        "selected_arxiv_paper"
+                    ] = paper
+
+
+# --------------------------------------------------
+# Follow-up questions
+# --------------------------------------------------
+
+if "selected_arxiv_paper" in st.session_state:
+
+    selected_paper = st.session_state[
+        "selected_arxiv_paper"
+    ]
+
+    st.markdown(
+        "### 💬 Ask Follow-up Questions"
+    )
+
+    followup = st.text_input(
+        "Ask something about the selected paper",
+        placeholder=(
+            "Example: What problem does this research solve?"
+        ),
+        key="arxiv_followup"
+    )
+
+    if followup:
+
+        title = selected_paper.get(
+            "title",
+            ""
+        ).strip()
+
+        abstract = selected_paper.get(
+            "abstract",
+            ""
+        ).strip()
+
+        concepts = extract_concepts(
+            selected_paper
+        )
+
+        prompt = f"""
+Answer the user's follow-up question
+using the selected research paper as context.
+
+Paper title:
+{title}
+
+Paper abstract:
+{abstract}
+
+Research concepts:
+{", ".join(concepts)}
+
+User question:
+{followup}
+
+Answer clearly and technically accurately.
+
+Do not invent information that is not
+supported by the paper.
+"""
+
+        with st.spinner(
+            "Thinking..."
+        ):
+
+            followup_answer = ask_openrouter(
+                prompt
+            )
+
+        st.write(
+            followup_answer
+        )
+
+
+# --------------------------------------------------
+# Concept visualization
+# --------------------------------------------------
+
+st.markdown(
+    "### 🧠 Research Concept Visualization"
+)
+
+st.write(
+    "Select a Computer Science paper to view "
+    "its extracted research concepts."
+)
+
+
+paper_titles = [
+
+    paper.get(
+        "title",
+        ""
+    ).strip()
+
+    for paper in arxiv_papers[:200]
+
+]
+
+
+if paper_titles:
+
+    selected_title = st.selectbox(
+        "Choose a paper",
+        paper_titles,
+        key="arxiv_visualization_paper"
+    )
+
+    selected_paper_for_graph = next(
+
+        (
+            paper
+
+            for paper in arxiv_papers
+
+            if paper.get(
+                "title",
+                ""
+            ).strip()
+            == selected_title
+        ),
+
+        None
+    )
+
+    if selected_paper_for_graph:
+
+        concepts = extract_concepts(
+            selected_paper_for_graph
+        )
+
+        if concepts:
+
+            st.write(
+                "**Detected concepts:**"
+            )
+
+            st.write(
+                " • ".join(concepts)
+            )
+
+            if st.button(
+                "📊 Show Concept Graph",
+                key="show_arxiv_graph"
+            ):
+
+                fig = create_concept_graph(
+                    selected_paper_for_graph,
+                    concepts
+                )
+
+                st.pyplot(fig)
+
+                import matplotlib.pyplot as plt
+
+                plt.close(fig)
+
+        else:
+
+            st.write(
+                "No major concepts detected."
+            )
 
 
 # ==================================================
@@ -222,7 +554,6 @@ if user_input:
             "content": user_input
         }
     )
-
 
     with st.chat_message("user"):
 
@@ -349,7 +680,9 @@ if user_input:
     # --------------------------------------------------
 
     source_information = ""
+
     knowledge_source = ""
+
     dynamic_metadata = []
 
 
@@ -363,7 +696,6 @@ if user_input:
             user_input,
             medical_data
         )
-
 
         if medical_results:
 
@@ -401,7 +733,6 @@ if user_input:
                 results=3
             )
 
-
             if dynamic_documents:
 
                 source_information = (
@@ -409,7 +740,6 @@ if user_input:
                 )
 
                 knowledge_source = "dynamic"
-
 
         except Exception:
 
@@ -419,9 +749,6 @@ if user_input:
     # ==================================================
     # TASK 6 - MULTILINGUAL RESPONSE
     # ==================================================
-
-    # We use the multilingual assistant for the final
-    # response so the current user's language is preserved.
 
     if source_information:
 
@@ -512,10 +839,6 @@ Sentiment:
         st.write(response)
 
 
-        # ----------------------------------------------
-        # Medical information detected
-        # ----------------------------------------------
-
         if detected_parts:
 
             st.caption(
@@ -525,10 +848,6 @@ Sentiment:
                 )
             )
 
-
-        # ----------------------------------------------
-        # Dynamic knowledge source
-        # ----------------------------------------------
 
         if knowledge_source == "dynamic":
 
@@ -543,10 +862,6 @@ Sentiment:
                     f"Knowledge source: {source}"
                 )
 
-
-        # ----------------------------------------------
-        # Multilingual feature
-        # ----------------------------------------------
 
         st.caption(
             "🌐 Multilingual response enabled"
